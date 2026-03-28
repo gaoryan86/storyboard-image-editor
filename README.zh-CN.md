@@ -87,9 +87,9 @@ Windows 可在资源管理器中双击 `index.html`。
 
 ## 截图
 
-### 拼接器
+### Editor 流水线界面
 
-![Storyboard Stitcher](./apps/stitcher/assets/screenshot-zh.png)
+![Storyboard Image Editor Pipeline](./assets/screenshot-zh.png)
 
 ## 环境要求
 

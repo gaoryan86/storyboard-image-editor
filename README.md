@@ -87,9 +87,9 @@ No install step, package manager, or build command is required for normal use.
 
 ## Screenshots
 
-### Stitcher
+### Editor Pipeline
 
-![Storyboard Stitcher](./apps/stitcher/assets/screenshot-en.png)
+![Storyboard Image Editor Pipeline](./assets/screenshot-en.png)
 
 ## Requirements
 
