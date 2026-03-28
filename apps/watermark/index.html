@@ -1,0 +1,2309 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Watermark</title>
+    <style>
+        /* ========================================================
+           DESIGN SYSTEM TOKENS (WAR-ROOM / RAW PRO STYLE)
+           ======================================================== */
+        :root {
+            /* Colors */
+            --bg-base: #0a0a0b;
+            --bg-surface: #141416;
+            --bg-surface-hover: #1f1f22;
+            --border-color: #2b2b2f;
+            --border-focus: #4b4b52;
+            --text-primary: #ededed;
+            --text-secondary: #8b8b93;
+            --text-muted: #5e5e66;
+            
+            /* Accents */
+            --accent-color: #3b82f6; /* Hard-core tech blue */
+            --accent-hover: #2563eb;
+            --accent-transparent: rgba(59, 130, 246, 0.15);
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --success-color: #10b981;
+            
+            /* Typography */
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --watermark-font-family: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', 'Helvetica Neue', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            
+            /* Sizing & Spacing */
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+        }
+
+        /* ========================================================
+           BASE RESET & LAYOUT
+           ======================================================== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: var(--font-family);
+            background: var(--bg-base);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* App-like feel */
+        }
+
+        /* HEADER */
+        header {
+            height: 48px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 var(--spacing-md);
+            background: var(--bg-surface);
+            flex-shrink: 0;
+        }
+
+        .header-title {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header-title::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--accent-color);
+            border-radius: 50%;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+        }
+
+        .header-action-btn {
+            width: auto;
+            padding: 7px 12px;
+        }
+
+        .lang-switch {
+            display: inline-flex;
+            align-items: center;
+            flex: none;
+            gap: 4px;
+            padding: 3px;
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+            background: var(--bg-base);
+        }
+
+        .lang-toggle-btn {
+            min-width: 56px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1;
+            white-space: nowrap;
+            flex: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .lang-toggle-btn.active {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        /* MAIN APP CONTAINER */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 48px);
+            overflow: hidden;
+        }
+
+        /* ========================================================
+           LEFT SIDEBAR (CONTROLS)
+           ======================================================== */
+        .sidebar-left {
+            width: 320px;
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            z-index: 10;
+            overflow: hidden;
+        }
+
+        .sidebar-scroll {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+        }
+        .sidebar-scroll::-webkit-scrollbar { width: 6px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border-focus); border-radius: 3px; }
+
+        .panel-section {
+            padding: 12px var(--spacing-md);
+            border-bottom: 1px solid var(--border-color);
+        }
+        .feature-hidden {
+            display: none !important;
+        }
+        .sidebar-scroll .panel-section:last-child {
+            border-bottom: none;
+        }
+
+        .panel-title {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .panel-title-row,
+        .label-row,
+        .inline-help-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .panel-title-row {
+            margin-bottom: 10px;
+        }
+        .panel-title-row .panel-title,
+        .label-row label {
+            margin-bottom: 0;
+        }
+        .export-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            align-items: start;
+        }
+        .export-grid .control-group {
+            margin-bottom: 0;
+            min-width: 0;
+        }
+        .export-grid .help-popover {
+            width: 190px;
+        }
+        .export-folder-row {
+            display: flex;
+            gap: 8px;
+        }
+        .export-folder-row input {
+            min-width: 0;
+        }
+        .export-grid input,
+        .export-grid select {
+            height: 44px;
+        }
+        .export-folder-row .btn {
+            width: 52px;
+            min-width: 52px;
+            padding: 0;
+        }
+        .btn-with-help {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-with-help .btn {
+            flex: 1;
+        }
+        .help-inline {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: none;
+        }
+        .help-trigger {
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.28);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-secondary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            cursor: help;
+            transition: all 0.2s ease;
+        }
+        .help-trigger:hover,
+        .help-inline:hover .help-trigger,
+        .help-inline:focus-within .help-trigger {
+            color: white;
+            border-color: rgba(255,255,255,0.45);
+            background: rgba(255,255,255,0.08);
+        }
+        .help-popover {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            width: 220px;
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            background: rgba(18, 20, 24, 0.96);
+            color: var(--text-primary);
+            font-size: 12px;
+            line-height: 1.5;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.32);
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-4px);
+            transition: opacity 0.16s ease, transform 0.16s ease;
+            z-index: 30;
+            text-transform: none;
+            letter-spacing: normal;
+            font-weight: 400;
+        }
+        .help-inline:hover .help-popover,
+        .help-inline:focus-within .help-popover {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        .control-group {
+            margin-bottom: 10px;
+        }
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-primary);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        /* Form Elements */
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-base);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, input[type="number"]:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+        
+        input[readonly] {
+            color: var(--text-secondary);
+            font-family: var(--font-mono);
+            font-size: 11px;
+        }
+
+        /* Custom Range Slider */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-color);
+            height: 4px;
+            background: var(--bg-surface-hover);
+            border-radius: 2px;
+            outline: none;
+        }
+        .slider-value {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-secondary);
+            width: 40px;
+            text-align: right;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            width: 100%; /* Default block level in sidebar */
+        }
+        .btn-row {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+        .btn-row .btn { flex: 1; }
+        
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+        .btn-primary:hover { background: var(--accent-hover); }
+        
+        .btn-secondary {
+            background: var(--bg-base);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+        .btn-secondary:hover {
+            background: var(--bg-surface-hover);
+            border-color: var(--border-focus);
+        }
+        
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px dashed var(--border-color);
+        }
+        .btn-ghost:hover {
+            border-color: var(--text-secondary);
+            background: var(--bg-surface-hover);
+        }
+
+        .btn-danger-ghost {
+            background: transparent;
+            color: var(--danger-color);
+            border: 1px solid transparent;
+        }
+        .btn-danger-ghost:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /* Apply to All Feature Banner */
+        .pro-feature {
+            margin-bottom: 10px;
+        }
+        .pro-feature .btn {
+            background: var(--bg-base);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        .pro-feature .btn:hover {
+            background: var(--bg-surface);
+            border-color: var(--border-focus);
+        }
+
+        /* Fixed Bottom Action Panel */
+        .sidebar-bottom {
+            background: var(--bg-base);
+            flex-shrink: 0;
+        }
+
+        .action-hint {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.45;
+            margin-top: 6px;
+        }
+
+        .action-block {
+            margin-bottom: 10px;
+        }
+        .action-block:last-child {
+            margin-bottom: 0;
+        }
+
+        .shortcut-hint {
+            font-family: var(--font-mono);
+        }
+
+        /* ========================================================
+           RIGHT CONTENT (CANVAS & FILMSTRIP)
+           ======================================================== */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #000; /* Pure black to focus on image */
+            position: relative;
+        }
+
+        /* Top Status Bar */
+        .editor-status {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 20;
+            background: rgba(20, 20, 22, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 6px 12px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 16px;
+        }
+        .editor-status span { color: var(--text-primary); }
+
+        /* Canvas Area */
+        .canvas-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: auto;
+            padding: var(--spacing-lg);
+        }
+
+        #canvas-container {
+            position: relative;
+            box-shadow: 0 0 0 1px var(--border-color), 0 20px 40px rgba(0,0,0,0.5);
+            max-width: 100%;
+            background: repeating-conic-gradient(#141416 0% 25%, transparent 0% 50%) 50% / 20px 20px;
+        }
+
+        #main-image {
+            display: block;
+            max-width: 100%;
+            max-height: calc(100vh - 200px); /* Leave room for filmstrip */
+            object-fit: contain;
+        }
+        #mosaic-preview {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #mosaic-preview.brush-mode {
+            pointer-events: auto;
+            cursor: crosshair;
+        }
+
+        /* Watermark Element */
+        .watermark {
+            position: absolute;
+            color: white;
+            font-family: var(--watermark-font-family);
+            font-weight: 300;
+            cursor: move;
+            user-select: none;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+            white-space: nowrap;
+            transform: translate(-50%, -50%);
+            transform-origin: center center;
+            transition: outline 0.2s, opacity 0.2s;
+        }
+        .watermark:hover {
+            outline: 1px dashed rgba(255,255,255,0.8);
+        }
+        .watermark.selected {
+            outline: 2px solid var(--accent-color);
+        }
+        .watermark.dragging {
+            opacity: 0.8;
+            outline: 2px solid var(--accent-color);
+        }
+        .watermark-label {
+            display: inline-block;
+        }
+        .wm-handle {
+            position: absolute;
+            display: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: rgba(15, 16, 19, 0.95);
+            border: 2px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+            pointer-events: auto;
+        }
+        .watermark.selected .wm-handle {
+            display: block;
+        }
+        .wm-handle-rotate {
+            top: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            cursor: grab;
+            border-color: #ffd166;
+        }
+        .wm-handle-rotate::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 14px;
+            width: 1px;
+            height: 12px;
+            background: rgba(255,255,255,0.7);
+            transform: translateX(-50%);
+        }
+        .wm-handle-resize {
+            right: -14px;
+            bottom: -14px;
+            cursor: nwse-resize;
+            border-color: var(--accent-color);
+        }
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+        .empty-state i {
+            display: block;
+            font-size: 32px;
+            margin-bottom: var(--spacing-sm);
+            opacity: 0.5;
+        }
+        .empty-state p { font-size: 13px; }
+
+        /* ========================================================
+           BOTTOM FILMSTRIP (THUMBNAILS)
+           ======================================================== */
+        .filmstrip {
+            height: 120px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 var(--spacing-md);
+            overflow-x: auto;
+            flex-shrink: 0;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-focus) var(--bg-surface);
+        }
+        .filmstrip::-webkit-scrollbar { height: 8px; }
+        .filmstrip::-webkit-scrollbar-track { background: var(--bg-surface); }
+        .filmstrip::-webkit-scrollbar-thumb { background: var(--border-focus); border-radius: 4px; }
+
+        .thumb-wrapper {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            flex-shrink: 0;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--bg-base);
+        }
+        .thumb-wrapper:hover { border-color: var(--border-focus); }
+        .thumb-wrapper.active { 
+            border-color: var(--text-primary); 
+            box-shadow: 0 0 0 1px var(--text-primary); 
+        }
+
+        .thumb {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        .thumb-wrapper.active .thumb { opacity: 1; }
+
+        /* Processed Indicator */
+        .thumb-status {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 16px;
+            height: 16px;
+            background: var(--success-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: black;
+            font-size: 10px;
+            opacity: 0;
+            transform: scale(0.8);
+            transition: all 0.2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .thumb-wrapper.processed .thumb { opacity: 0.9; }
+        .thumb-wrapper.processed .thumb-status {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* File Input */
+        .file-input { display: none; }
+
+        /* ========================================================
+           TOAST NOTIFICATIONS (MESSAGES)
+           ======================================================== */
+        #toast-container {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            background: var(--bg-surface-hover);
+            color: var(--text-primary);
+            border-left: 3px solid var(--accent-color);
+            padding: 12px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            min-width: 280px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toast.error { border-left-color: var(--danger-color); }
+        .toast.success { border-left-color: var(--success-color); }
+        .toast.fade-out {
+            animation: fadeOutBase 0.3s ease forwards;
+        }
+
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOutBase {
+            to { opacity: 0; transform: translateY(10px); }
+        }
+
+        /* Mobile fallback */
+        @media (max-width: 768px) {
+            .workspace { flex-direction: column; }
+            .sidebar-left { width: 100%; border-right: none; border-bottom: 1px solid var(--border-color); flex-shrink: 0; max-height: 40vh; }
+            .main-content { min-height: 50vh; }
+            .filmstrip { height: 80px; }
+            .thumb-wrapper { width: 60px; height: 60px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="header-title"><span data-i18n="appTitle">批量水印工具</span> <span style="color:var(--text-secondary);font-weight:400;font-size:11px;">(v2.0)</span></div>
+        <div class="header-actions">
+            <div class="lang-switch">
+                <button class="lang-toggle-btn" id="lang-en" onclick="setLanguage('en')" data-i18n="languageEn">EN</button>
+                <button class="lang-toggle-btn" id="lang-zh" onclick="setLanguage('zh')" data-i18n="languageZh">中文</button>
+            </div>
+            <button class="btn btn-danger-ghost header-action-btn" onclick="clearAll()" title="清空工作区" data-i18n-title="clearWorkspaceTitle">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <span data-i18n="clearWorkspace">清空当前批次</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <!-- Left Sidebar: Controls -->
+        <aside class="sidebar-left">
+            <div class="sidebar-scroll">
+            <!-- File Panel -->
+            <div class="panel-section">
+                <div class="panel-title-row">
+                    <div class="panel-title" data-i18n="importPanel">导入图片</div>
+                    <div class="help-inline">
+                        <button class="help-trigger" type="button" data-i18n-aria-label="helpButtonLabel">i</button>
+                        <div class="help-popover" data-i18n="importHint">默认读取当前文件夹内的图片，并按文件名顺序排列。</div>
+                    </div>
+                </div>
+                <div class="btn-row control-group">
+                    <button class="btn btn-secondary" onclick="document.getElementById('file-input').click()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        <span data-i18n="openImage">打开图片</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="document.getElementById('folder-input').click()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        <span data-i18n="openFolder">打开文件夹</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Properties Panel -->
+            <div class="panel-section">
+                <div class="panel-title" data-i18n="watermarkPanel">文字与字号</div>
+                <div class="control-group">
+                    <label data-i18n="watermarkTextLabel">文字</label>
+                    <input type="text" id="watermark-text" value="AI Character" placeholder="输入要添加的文字" data-i18n-placeholder="watermarkTextPlaceholder">
+                </div>
+                <div class="control-group">
+                    <label data-i18n="fontSizeLabel">字号</label>
+                    <div class="slider-container">
+                        <input type="range" id="font-size" min="12" max="144" value="24" oninput="updateFontSize(this.value)">
+                        <span class="slider-value" id="size-value">24px</span>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label data-i18n="rotationLabel">旋转</label>
+                    <div class="slider-container">
+                        <input type="range" id="rotation" min="-180" max="180" value="0">
+                        <span class="slider-value" id="rotation-value">0deg</span>
+                    </div>
+                </div>
+                <div class="control-group feature-hidden" data-mosaic-feature hidden>
+                    <label data-i18n="mosaicBrushSizeLabel">马赛克笔刷</label>
+                    <div class="slider-container">
+                        <input type="range" id="mosaic-brush-size" min="20" max="180" value="72">
+                        <span class="slider-value" id="mosaic-brush-size-value">72px</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Canvas Operations -->
+            <div class="panel-section">
+                <div class="panel-title-row">
+                    <div class="panel-title" data-i18n="currentPanel">当前图片操作</div>
+                    <div class="help-inline">
+                        <button class="help-trigger" type="button" data-i18n-aria-label="helpButtonLabel">i</button>
+                        <div class="help-popover" data-i18n="currentPanelHelp">文字可直接拖动、缩放、旋转。</div>
+                    </div>
+                </div>
+                <div class="btn-row control-group">
+                    <button class="btn btn-secondary" onclick="addWatermark()" id="btn-add">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span data-i18n="addLayer">新增文字层</span>
+                    </button>
+                    <button class="btn btn-secondary feature-hidden" onclick="toggleMosaicBrushMode()" id="btn-mosaic-brush" data-mosaic-feature hidden>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8c1.657 0 3 1.343 3 3 0 1.12-.614 2.097-1.522 2.61L13 20l-9-9 6.39-6.478A2.998 2.998 0 0 1 13 3c1.657 0 3 1.343 3 3 0 .768-.289 1.468-.764 2 .476.532.764 1.232.764 2z"></path></svg>
+                        <span data-i18n="mosaicBrushToggle">马赛克涂抹</span>
+                    </button>
+                </div>
+                <div class="btn-row control-group">
+                    <button class="btn btn-secondary feature-hidden" onclick="clearMosaicBrushes()" id="btn-clear-mosaic" data-mosaic-feature hidden>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="M19 6l-1 14H6L5 6"></path></svg>
+                        <span data-i18n="clearMosaic">清除马赛克</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="deleteSelectedObject()" id="btn-remove">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        <span data-i18n="removeLayer">删除选中对象</span>
+                    </button>
+                </div>
+                
+                <div class="action-block">
+                    <button class="btn btn-secondary" onclick="saveCurrent()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        <span data-i18n="completeCurrent">立即保存当前设置</span>
+                    </button>
+                </div>
+
+                <!-- NEW FEATURE: Apply to All -->
+                <div class="pro-feature">
+                    <div class="btn-with-help">
+                        <button class="btn btn-secondary" onclick="applyToAll()" title="把当前设置复制到全部图片" data-i18n-title="copyToAllTitle">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                            <span data-i18n="copyToAll">把当前设置复制到全部图片</span>
+                        </button>
+                        <div class="help-inline">
+                            <button class="help-trigger" type="button" data-i18n-aria-label="helpButtonLabel">i</button>
+                            <div class="help-popover" data-i18n="copyPanelHint">会把当前图的文字、水印位置和字号复制到全部图片。</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>
+
+            <!-- Export Panel -->
+            <div class="panel-section sidebar-bottom">
+                <div class="panel-title" data-i18n="exportPanel">批量导出</div>
+                <div class="export-grid">
+                    <div class="control-group">
+                        <div class="label-row" style="margin-bottom: var(--spacing-sm);">
+                            <label data-i18n="exportFolderLabel">文件夹</label>
+                            <div class="help-inline">
+                                <button class="help-trigger" type="button" data-i18n-aria-label="helpButtonLabel">i</button>
+                                <div class="help-popover" data-i18n="exportAuthHint">首次导出需要点右侧按钮授权文件夹。</div>
+                            </div>
+                        </div>
+                        <div class="export-folder-row">
+                            <input type="text" id="export-path" placeholder="请先选择" readonly style="flex:1;" value="output">
+                            <button class="btn btn-secondary" onclick="selectFolder()" style="width: auto;" title="选择导出文件夹" data-i18n-title="selectExportFolderTitle">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <div class="label-row" style="margin-bottom: var(--spacing-sm);">
+                            <label data-i18n="exportFormatLabel">格式</label>
+                            <div class="help-inline">
+                                <button class="help-trigger" type="button" data-i18n-aria-label="helpButtonLabel">i</button>
+                                <div class="help-popover" data-i18n="exportFormatHint">默认跟原图一致，也可以手动改成 JPG 或 PNG。</div>
+                            </div>
+                        </div>
+                        <select id="export-format">
+                            <option value="original" data-i18n="exportFormatOriginal">原格式</option>
+                            <option value="jpg" data-i18n="exportFormatJpg">JPG</option>
+                            <option value="png" data-i18n="exportFormatPng">PNG</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="batchExport()" style="height: 40px; font-size: 14px;">
+                    <span data-i18n="exportCompleted">导出已保存图片</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Right Core: Canvas & Filmstrip -->
+        <main class="main-content">
+            
+            <!-- Metadata overlay -->
+            <div class="editor-status" id="editor-status" style="display:none;">
+                <span><span data-i18n="statusCurrentFile">当前文件</span>: <span id="current-name" style="color: white; font-weight: 500;">IMG_001.JPG</span></span>
+                <span><span data-i18n="statusCompleted">已保存</span>: <span id="processed-count" style="color: white; font-weight: 500;">0</span> / <span id="total-count" style="color: white; font-weight: 500;">0</span></span>
+            </div>
+
+            <!-- Canvas Viewport -->
+            <div class="canvas-wrapper">
+                <div id="canvas-container">
+                    <img id="main-image" src="" alt="" style="display:none;">
+                    <canvas id="mosaic-preview" class="feature-hidden" data-mosaic-feature hidden></canvas>
+                </div>
+                <!-- Empty state UI -->
+                <div class="empty-state" id="empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 12px auto; display: block; opacity: 0.5;">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <p data-i18n="emptyState">先点“打开文件夹”导入图片</p>
+                </div>
+            </div>
+
+            <!-- Filmstrip -->
+            <div class="filmstrip" id="filmstrip">
+                <!-- Thumbnails generated dynamically here -->
+            </div>
+            
+        </main>
+    </div>
+
+    <!-- Hidden native elements -->
+    <input type="file" id="folder-input" class="file-input" accept="image/*" webkitdirectory onchange="loadImageFolder(event)">
+    <input type="file" id="file-input" class="file-input" accept="image/*" multiple onchange="loadImages(event)">
+    <canvas id="export-canvas" style="display: none;"></canvas>
+    <div id="toast-container"></div>
+
+    <script>
+        // ==========================================
+        // APP STATE
+        // ==========================================
+        let currentImage = null;
+        let watermarks = [];
+        let activeWatermark = null;
+        let copiedWatermarkData = null;
+        let mosaicBrushStrokes = [];
+        let isMosaicBrushMode = false;
+        let isPaintingMosaic = false;
+        let mosaicPixelPreviewCanvas = null;
+        let currentFiles = [];
+        let currentFileIndex = 0;
+        
+        // Structure: { fileName: { watermarks: [...], mosaics: [...], isProcessed: boolean } }
+        let imageSettings = {};
+        
+        const UI = {
+            mainImage: document.getElementById('main-image'),
+            canvasContainer: document.getElementById('canvas-container'),
+            filmstrip: document.getElementById('filmstrip'),
+            emptyState: document.getElementById('empty-state'),
+            statusOverlay: document.getElementById('editor-status'),
+            textInput: document.getElementById('watermark-text'),
+            fontSizeInput: document.getElementById('font-size'),
+            sizeValue: document.getElementById('size-value'),
+            rotationInput: document.getElementById('rotation'),
+            rotationValue: document.getElementById('rotation-value'),
+            mosaicBrushSizeInput: document.getElementById('mosaic-brush-size'),
+            mosaicBrushSizeValue: document.getElementById('mosaic-brush-size-value'),
+            mosaicPreview: document.getElementById('mosaic-preview'),
+            exportPath: document.getElementById('export-path'),
+            exportFormat: document.getElementById('export-format')
+        };
+
+        const ENABLE_MOSAIC_FEATURE = false;
+        const DEFAULT_FONT_SIZE = 24;
+        const DEFAULT_MOSAIC_BRUSH_SIZE = 72;
+        const PREVIEW_MOSAIC_BLOCK_SIZE = 18;
+        const EXPORT_MOSAIC_BLOCK_SIZE = 24;
+        const DEFAULT_WATERMARK_FONT_WEIGHT = '300';
+        const DEFAULT_EXPORT_FONT_FAMILY = "'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', 'Helvetica Neue', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+        const DEFAULT_EXPORT_PATH = 'output';
+        const HANDLE_DB_NAME = 'batch-watermark-db';
+        const HANDLE_STORE_NAME = 'kv';
+        const EXPORT_HANDLE_KEY = 'exportDirectoryHandle';
+        const NATURAL_SORTER = new Intl.Collator('zh-Hans-CN', { numeric: true, sensitivity: 'base' });
+        const I18N = {
+            zh: {
+                pageTitle: 'Batch Watermark',
+                appTitle: '批量水印工具',
+                languageZh: '中文',
+                languageEn: 'EN',
+                helpButtonLabel: '显示说明',
+                clearWorkspace: '清空当前批次',
+                clearWorkspaceTitle: '清空当前批次',
+                importPanel: '导入图片',
+                openImage: '打开图片',
+                openFolder: '打开文件夹',
+                importHint: '默认读取当前文件夹内的图片，并按文件名顺序排列。',
+                watermarkPanel: '文字与字号',
+                watermarkTextLabel: '文字',
+                watermarkTextPlaceholder: '输入要添加的文字',
+                fontSizeLabel: '字号',
+                rotationLabel: '旋转',
+                mosaicBrushSizeLabel: '马赛克笔刷',
+                currentPanel: '当前图片操作',
+                currentPanelHelp: '文字可直接拖动、缩放、旋转。',
+                mosaicBrushHint: '点“马赛克涂抹”进入涂抹模式，然后直接在图片上按住拖动。',
+                addLayer: '新增文字层',
+                mosaicBrushToggle: '马赛克涂抹',
+                clearMosaic: '清除马赛克',
+                removeLayer: '删除选中对象',
+                completeCurrent: '立即保存当前设置',
+                copyPanelHint: '会把当前图的文字、水印位置和字号复制到全部图片。',
+                copyToAll: '把当前设置复制到全部图片',
+                copyToAllTitle: '把当前设置复制到全部图片',
+                exportPanel: '批量导出',
+                exportFolderLabel: '文件夹',
+                exportFormatLabel: '格式',
+                exportFormatHint: '默认跟原图一致，也可以手动改成 JPG 或 PNG。',
+                exportFormatOriginal: '原格式',
+                exportFormatJpg: 'JPG',
+                exportFormatPng: 'PNG',
+                selectExportFolderTitle: '选择导出文件夹',
+                exportAuthHint: '首次导出需要点右侧按钮授权文件夹。',
+                exportCompleted: '导出已保存图片',
+                statusCurrentFile: '当前文件',
+                statusCompleted: '已保存',
+                emptyState: '先点“打开文件夹”导入图片',
+                toastNoUsableImages: '没有读取到可用图片',
+                toastNoImagesInFolder: '当前文件夹没有可用图片',
+                toastOpenFilesFirst: '请先打开文件夹或图片',
+                toastAllCompleted: '没有待处理图片了',
+                toastNoCurrentImage: '当前没有图片',
+                toastCompletedCurrent: '已保存当前图设置',
+                toastNoLayers: '当前没有可复制的水印层',
+                toastNoSelection: '请先选中一个对象',
+                toastMosaicBrushEnabled: '已进入马赛克涂抹模式',
+                toastMosaicBrushDisabled: '已退出马赛克涂抹模式',
+                toastClearedMosaic: '已清除当前图片的马赛克',
+                toastCopiedWatermark: '已复制当前水印',
+                toastPastedWatermark: '已粘贴水印副本',
+                toastNoCopiedWatermark: '还没有可粘贴的水印',
+                toastAppliedToAll: '已将当前设置复制到 {count} 张图片',
+                toastSelectFolderFailed: '选择文件夹失败，请使用 Chrome/Edge 86+ 浏览器',
+                toastNoCompletedExport: '没有可导出的已保存图片',
+                toastNeedExportFolder: '请先选择并授权导出文件夹（仅首次需要）',
+                toastStartExport: '开始导出，共 {count} 张...',
+                toastSaveFailed: '保存失败: {fileName}',
+                toastExportComplete: '导出完成，共导出 {count} 张图片',
+                toastExportFailed: '导出失败: {message}',
+                confirmClearWorkspace: '确认清空工作区？未保存的操作会丢失。'
+            },
+            en: {
+                pageTitle: 'Batch Watermark',
+                appTitle: 'Batch Watermark',
+                languageZh: '中文',
+                languageEn: 'EN',
+                helpButtonLabel: 'Show help',
+                clearWorkspace: 'Clear Current Batch',
+                clearWorkspaceTitle: 'Clear current batch',
+                importPanel: 'Import Images',
+                openImage: 'Open Images',
+                openFolder: 'Open Folder',
+                importHint: 'Loads images from the current folder and sorts them by filename.',
+                watermarkPanel: 'Text & Size',
+                watermarkTextLabel: 'Text',
+                watermarkTextPlaceholder: 'Enter watermark text',
+                fontSizeLabel: 'Size',
+                rotationLabel: 'Rotation',
+                mosaicBrushSizeLabel: 'Mosaic Brush',
+                currentPanel: 'Current Image Actions',
+                currentPanelHelp: 'Text can be moved, resized, and rotated directly.',
+                mosaicBrushHint: 'Click "Mosaic Brush" to enter paint mode, then drag directly on the image.',
+                addLayer: 'Add Text Layer',
+                mosaicBrushToggle: 'Mosaic Brush',
+                clearMosaic: 'Clear Mosaic',
+                removeLayer: 'Delete Selected',
+                completeCurrent: 'Save Current Settings Now',
+                copyPanelHint: 'Copies text, size, and placement to all images.',
+                copyToAll: 'Copy Current Settings to All Images',
+                copyToAllTitle: 'Copy current image settings to all images',
+                exportPanel: 'Export',
+                exportFolderLabel: 'Folder',
+                exportFormatLabel: 'Format',
+                exportFormatHint: 'Default is Original. You can switch to JPG or PNG.',
+                exportFormatOriginal: 'Original',
+                exportFormatJpg: 'JPG',
+                exportFormatPng: 'PNG',
+                selectExportFolderTitle: 'Choose export folder',
+                exportAuthHint: 'The first export still needs one folder permission grant.',
+                exportCompleted: 'Export Saved Images',
+                statusCurrentFile: 'Current File',
+                statusCompleted: 'Saved',
+                emptyState: 'Click "Open Folder" to import images',
+                toastNoUsableImages: 'No usable images were loaded.',
+                toastNoImagesInFolder: 'No usable images were found in this folder.',
+                toastOpenFilesFirst: 'Open a folder or images first.',
+                toastAllCompleted: 'No pending images left.',
+                toastNoCurrentImage: 'No image is loaded right now.',
+                toastCompletedCurrent: 'Current image settings saved.',
+                toastNoLayers: 'There are no watermark settings to copy.',
+                toastNoSelection: 'Select an object first.',
+                toastMosaicBrushEnabled: 'Mosaic brush mode enabled.',
+                toastMosaicBrushDisabled: 'Mosaic brush mode disabled.',
+                toastClearedMosaic: 'Cleared mosaic strokes on this image.',
+                toastCopiedWatermark: 'Copied the current watermark.',
+                toastPastedWatermark: 'Pasted a watermark copy.',
+                toastNoCopiedWatermark: 'There is no copied watermark to paste yet.',
+                toastAppliedToAll: 'Copied the current settings to {count} images.',
+                toastSelectFolderFailed: 'Folder selection failed. Use Chrome/Edge 86+.',
+                toastNoCompletedExport: 'There are no saved images to export.',
+                toastNeedExportFolder: 'Select and authorize an export folder first (only needed once).',
+                toastStartExport: 'Starting export for {count} images...',
+                toastSaveFailed: 'Save failed: {fileName}',
+                toastExportComplete: 'Export complete. {count} images written.',
+                toastExportFailed: 'Export failed: {message}',
+                confirmClearWorkspace: 'Clear the workspace? Unsaved changes will be lost.'
+            }
+        };
+
+        let currentLanguage = 'en';
+
+        function t(key, params = {}) {
+            const template = I18N[currentLanguage][key] || I18N.zh[key] || key;
+            return template.replace(/\{(\w+)\}/g, (_, name) => params[name] ?? `{${name}}`);
+        }
+
+        function updateLanguageToggle() {
+            document.getElementById('lang-zh').classList.toggle('active', currentLanguage === 'zh');
+            document.getElementById('lang-en').classList.toggle('active', currentLanguage === 'en');
+        }
+
+        function applyMosaicFeatureVisibility() {
+            document.querySelectorAll('[data-mosaic-feature]').forEach((node) => {
+                node.hidden = !ENABLE_MOSAIC_FEATURE;
+                node.classList.toggle('feature-hidden', !ENABLE_MOSAIC_FEATURE);
+            });
+            if (!ENABLE_MOSAIC_FEATURE) {
+                mosaicBrushStrokes = [];
+                setMosaicBrushMode(false);
+                renderMosaicPreview();
+            }
+        }
+
+        function applyTranslations() {
+            document.title = t('pageTitle');
+            document.documentElement.lang = currentLanguage;
+
+            document.querySelectorAll('[data-i18n]').forEach((node) => {
+                node.textContent = t(node.dataset.i18n);
+            });
+
+            document.querySelectorAll('[data-i18n-placeholder]').forEach((node) => {
+                node.placeholder = t(node.dataset.i18nPlaceholder);
+            });
+
+            document.querySelectorAll('[data-i18n-title]').forEach((node) => {
+                node.title = t(node.dataset.i18nTitle);
+            });
+
+            document.querySelectorAll('[data-i18n-aria-label]').forEach((node) => {
+                node.setAttribute('aria-label', t(node.dataset.i18nAriaLabel));
+            });
+
+            updateLanguageToggle();
+            updateStatus();
+            applyMosaicFeatureVisibility();
+        }
+
+        function setLanguage(language) {
+            if (!I18N[language]) return;
+            currentLanguage = language;
+            applyTranslations();
+        }
+
+        function openHandleDb() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(HANDLE_DB_NAME, 1);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(HANDLE_STORE_NAME)) {
+                        db.createObjectStore(HANDLE_STORE_NAME);
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function saveExportDirectoryHandle(handle) {
+            if (!window.indexedDB) return;
+            const db = await openHandleDb();
+            await new Promise((resolve, reject) => {
+                const tx = db.transaction(HANDLE_STORE_NAME, 'readwrite');
+                tx.objectStore(HANDLE_STORE_NAME).put(handle, EXPORT_HANDLE_KEY);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+            db.close();
+        }
+
+        async function loadExportDirectoryHandle() {
+            if (!window.indexedDB) return null;
+            const db = await openHandleDb();
+            const handle = await new Promise((resolve, reject) => {
+                const tx = db.transaction(HANDLE_STORE_NAME, 'readonly');
+                const request = tx.objectStore(HANDLE_STORE_NAME).get(EXPORT_HANDLE_KEY);
+                request.onsuccess = () => resolve(request.result || null);
+                request.onerror = () => reject(request.error);
+            });
+            db.close();
+            return handle;
+        }
+
+        async function ensureDirectoryPermission(dirHandle) {
+            if (!dirHandle) return false;
+            const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
+            if (permission === 'granted') return true;
+            const requested = await dirHandle.requestPermission({ mode: 'readwrite' });
+            return requested === 'granted';
+        }
+
+        async function restoreExportDirectoryHandle() {
+            try {
+                const savedHandle = await loadExportDirectoryHandle();
+                if (!savedHandle) return false;
+                const granted = await ensureDirectoryPermission(savedHandle);
+                if (!granted) return false;
+                window.exportDirectoryHandle = savedHandle;
+                UI.exportPath.value = savedHandle.name;
+                return true;
+            } catch (err) {
+                console.warn('Restore export directory failed:', err);
+                return false;
+            }
+        }
+
+        // ==========================================
+        // FILE HANDLING
+        // ==========================================
+        function isImageFile(file) {
+            return file.type.startsWith('image/') || /\.(avif|bmp|gif|jpe?g|png|webp)$/i.test(file.name);
+        }
+
+        function isRootFolderFile(file) {
+            if (!file.webkitRelativePath) return true;
+            return file.webkitRelativePath.split('/').length === 2;
+        }
+
+        function sortFilesNaturally(files) {
+            return [...files].sort((a, b) => NATURAL_SORTER.compare(a.name, b.name));
+        }
+
+        function initializeLoadedFiles(files) {
+            currentFiles = files;
+            currentFileIndex = 0;
+            imageSettings = {};
+            
+            files.forEach(file => {
+                imageSettings[file.name] = { watermarks: [], mosaics: [], isProcessed: false };
+            });
+            
+            UI.emptyState.style.display = 'none';
+            UI.mainImage.style.display = 'block';
+            UI.statusOverlay.style.display = 'flex';
+            
+            updateStatus();
+            displayThumbnails();
+            loadSingleImage(files[0]);
+        }
+
+        function loadImages(event) {
+            const files = sortFilesNaturally(Array.from(event.target.files).filter(isImageFile));
+            if (files.length === 0) return showToast(t('toastNoUsableImages'), 'error');
+            initializeLoadedFiles(files);
+        }
+
+        function loadImageFolder(event) {
+            const files = sortFilesNaturally(
+                Array.from(event.target.files)
+                    .filter(isImageFile)
+                    .filter(isRootFolderFile)
+            );
+            if (files.length === 0) return showToast(t('toastNoImagesInFolder'), 'error');
+            initializeLoadedFiles(files);
+        }
+        
+        function displayThumbnails() {
+            UI.filmstrip.innerHTML = '';
+            
+            currentFiles.forEach((file, index) => {
+                // Build DOM synchronously so filmstrip order always equals file order.
+                const wrapper = document.createElement('div');
+                wrapper.className = 'thumb-wrapper' + (index === currentFileIndex ? ' active' : '');
+                wrapper.dataset.index = index;
+                wrapper.dataset.filename = file.name;
+
+                const img = document.createElement('img');
+                img.className = 'thumb';
+                const thumbUrl = URL.createObjectURL(file);
+                img.src = thumbUrl;
+                img.onload = () => URL.revokeObjectURL(thumbUrl);
+                img.onerror = () => URL.revokeObjectURL(thumbUrl);
+
+                const statusBadge = document.createElement('div');
+                statusBadge.className = 'thumb-status';
+                statusBadge.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+                if (imageSettings[file.name]?.isProcessed) {
+                    wrapper.classList.add('processed');
+                }
+
+                wrapper.onclick = () => {
+                    const clickedIndex = parseInt(wrapper.dataset.index, 10);
+                    goToFileIndex(clickedIndex);
+                };
+
+                wrapper.appendChild(img);
+                wrapper.appendChild(statusBadge);
+                UI.filmstrip.appendChild(wrapper);
+            });
+        }
+        
+        function updateActiveThumb() {
+            document.querySelectorAll('.thumb-wrapper').forEach((thumb) => {
+                const thumbIndex = parseInt(thumb.dataset.index, 10);
+                thumb.classList.toggle('active', thumbIndex === currentFileIndex);
+                // Auto scroll into view
+                if (thumbIndex === currentFileIndex) {
+                    thumb.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }
+            });
+        }
+        
+        function updateStatus() {
+            document.getElementById('total-count').textContent = currentFiles.length;
+            const processed = Object.values(imageSettings).filter(s => s.isProcessed).length;
+            document.getElementById('processed-count').textContent = processed;
+            
+            const currentName = currentFiles[currentFileIndex]?.name || '-';
+            document.getElementById('current-name').textContent = currentName;
+        }
+
+        function goToFileIndex(index) {
+            if (index < 0 || index >= currentFiles.length) return;
+            saveCurrentSettings();
+            currentFileIndex = index;
+            loadSingleImage(currentFiles[currentFileIndex]);
+            updateActiveThumb();
+            updateStatus();
+        }
+
+        function goToNextUnprocessed() {
+            if (currentFiles.length === 0) return showToast(t('toastOpenFilesFirst'), 'error');
+            saveCurrentSettings();
+
+            for (let offset = 1; offset <= currentFiles.length; offset++) {
+                const candidateIndex = (currentFileIndex + offset) % currentFiles.length;
+                const candidateFile = currentFiles[candidateIndex];
+                if (!imageSettings[candidateFile.name]?.isProcessed) {
+                    goToFileIndex(candidateIndex);
+                    return;
+                }
+            }
+
+            showToast(t('toastAllCompleted'), 'success');
+        }
+
+        // ==========================================
+        // CANVAS & WATERMARK LOGIC
+        // ==========================================
+        function loadSingleImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                UI.mainImage.src = e.target.result;
+                UI.mainImage.onload = () => {
+                    currentImage = UI.mainImage;
+                    resizeMosaicPreviewCanvas();
+                    rebuildMosaicPixelPreview();
+                    
+                    // Clear old watermarks from DOM
+                    document.querySelectorAll('.watermark').forEach(w => w.remove());
+                    watermarks = [];
+                    activeWatermark = null;
+                    mosaicBrushStrokes = [];
+                    setMosaicBrushMode(false);
+                    
+                    const settings = imageSettings[file.name];
+                    if (settings && settings.watermarks.length > 0) {
+                        restoreWatermarks(settings.watermarks);
+                    }
+                    if (ENABLE_MOSAIC_FEATURE && settings && settings.mosaics && settings.mosaics.length > 0) {
+                        restoreMosaicBrushStrokes(settings.mosaics);
+                    }
+                    if ((!settings || settings.watermarks.length === 0) && (!settings || !settings.mosaics || settings.mosaics.length === 0)) {
+                        selectWatermark(null);
+                    }
+                    renderMosaicPreview();
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function restoreWatermarks(savedWatermarks) {
+            const text = UI.textInput.value;
+            savedWatermarks.forEach(wm => {
+                createWatermarkElement(
+                    wm.text || text,
+                    wm.fontSize || parseInt(UI.fontSizeInput.value, 10),
+                    wm.left,
+                    wm.top,
+                    wm.rotation || 0,
+                    wm.scale || 1
+                );
+            });
+            
+            if (savedWatermarks.length > 0) {
+                const size = savedWatermarks[0].fontSize || parseInt(UI.fontSizeInput.value, 10);
+                UI.fontSizeInput.value = size;
+                UI.sizeValue.textContent = size + 'px';
+            }
+        }
+
+        function restoreMosaicBrushStrokes(savedMosaics) {
+            mosaicBrushStrokes = JSON.parse(JSON.stringify(savedMosaics));
+        }
+        
+        function addWatermarkAtCenter() {
+            const fontSize = parseInt(UI.fontSizeInput.value, 10) || DEFAULT_FONT_SIZE;
+            createWatermarkElement(UI.textInput.value || 'AI Character', fontSize, '50%', '50%');
+        }
+        
+        function addWatermark() {
+            if (!currentImage) return showToast(t('toastOpenFilesFirst'), 'error');
+            addWatermarkAtCenter();
+        }
+
+        function updateControlAvailability() {
+            UI.textInput.disabled = false;
+            UI.fontSizeInput.disabled = false;
+            UI.rotationInput.disabled = false;
+        }
+
+        function getWatermarkText(element) {
+            return element.querySelector('.watermark-label')?.textContent || '';
+        }
+
+        function setWatermarkText(element, text) {
+            const label = element.querySelector('.watermark-label');
+            if (label) label.textContent = text;
+        }
+
+        function getWatermarkSnapshot(element) {
+            normalizeWatermarkScale(element);
+            return {
+                text: getWatermarkText(element),
+                left: element.style.left,
+                top: element.style.top,
+                fontSize: parseInt(element.style.fontSize, 10) || DEFAULT_FONT_SIZE,
+                rotation: parseFloat(element.dataset.rotation || '0'),
+                scale: 1,
+                previewImageWidth: UI.mainImage.clientWidth || UI.mainImage.naturalWidth || 800
+            };
+        }
+
+        function offsetPercent(percentValue, delta) {
+            const base = parseFloat(percentValue || '50');
+            return `${Math.max(0, Math.min(100, base + delta))}%`;
+        }
+
+        function copyActiveWatermark() {
+            if (!activeWatermark) return showToast(t('toastNoSelection'), 'error');
+            copiedWatermarkData = getWatermarkSnapshot(activeWatermark);
+            showToast(t('toastCopiedWatermark'), 'success');
+        }
+
+        function pasteCopiedWatermark() {
+            if (!currentImage) return showToast(t('toastOpenFilesFirst'), 'error');
+            if (!copiedWatermarkData) return showToast(t('toastNoCopiedWatermark'), 'error');
+
+            const pastedWatermark = {
+                ...copiedWatermarkData,
+                left: offsetPercent(copiedWatermarkData.left, 2.5),
+                top: offsetPercent(copiedWatermarkData.top, 2.5)
+            };
+
+            createWatermarkElement(
+                pastedWatermark.text,
+                pastedWatermark.fontSize,
+                pastedWatermark.left,
+                pastedWatermark.top,
+                pastedWatermark.rotation,
+                pastedWatermark.scale
+            );
+            saveCurrentSettings();
+            showToast(t('toastPastedWatermark'), 'success');
+        }
+
+        function updateRotationValue(rotation) {
+            UI.rotationInput.value = Math.round(rotation);
+            UI.rotationValue.textContent = `${Math.round(rotation)}deg`;
+        }
+
+        function resetTransformControls() {
+            UI.fontSizeInput.value = DEFAULT_FONT_SIZE;
+            UI.sizeValue.textContent = `${DEFAULT_FONT_SIZE}px`;
+            updateRotationValue(0);
+        }
+
+        function applyWatermarkTransform(element) {
+            const rotation = parseFloat(element.dataset.rotation || '0');
+            const scale = parseFloat(element.dataset.scale || '1');
+            element.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) scale(${scale})`;
+        }
+
+        function setWatermarkScale(element, nextScale) {
+            const clampedScale = Math.max(0.2, Math.min(4, nextScale));
+            element.dataset.scale = clampedScale.toFixed(2);
+            applyWatermarkTransform(element);
+        }
+
+        function setWatermarkRotation(element, nextRotation) {
+            const normalized = ((nextRotation % 360) + 360) % 360;
+            element.dataset.rotation = normalized.toFixed(1);
+            applyWatermarkTransform(element);
+            if (activeWatermark === element) {
+                updateRotationValue(normalized);
+            }
+        }
+
+        function normalizeWatermarkScale(element) {
+            const scale = parseFloat(element.dataset.scale || '1');
+            if (Math.abs(scale - 1) < 0.001) return;
+            const baseFontSize = parseInt(element.style.fontSize, 10) || DEFAULT_FONT_SIZE;
+            element.style.fontSize = `${Math.max(12, Math.round(baseFontSize * scale))}px`;
+            element.dataset.scale = '1';
+            applyWatermarkTransform(element);
+        }
+
+        function selectWatermark(element) {
+            if (activeWatermark) activeWatermark.classList.remove('selected');
+            activeWatermark = element;
+            if (!activeWatermark) {
+                resetTransformControls();
+                updateControlAvailability();
+                return;
+            }
+
+            normalizeWatermarkScale(activeWatermark);
+            activeWatermark.classList.add('selected');
+            UI.textInput.value = getWatermarkText(activeWatermark);
+            const activeSize = parseInt(activeWatermark.style.fontSize, 10) || DEFAULT_FONT_SIZE;
+            const activeRotation = parseFloat(activeWatermark.dataset.rotation || '0');
+            UI.fontSizeInput.value = activeSize;
+            UI.sizeValue.textContent = `${activeSize}px`;
+            updateRotationValue(activeRotation);
+            updateControlAvailability();
+        }
+
+        function createWatermarkElement(text, size, left, top, rotation = 0, scale = 1) {
+            const watermark = document.createElement('div');
+            watermark.className = 'watermark';
+            watermark.innerHTML = `
+                <span class="watermark-label"></span>
+                <span class="wm-handle wm-handle-rotate" aria-hidden="true"></span>
+                <span class="wm-handle wm-handle-resize" aria-hidden="true"></span>
+            `;
+            setWatermarkText(watermark, text);
+            watermark.style.fontSize = size + 'px';
+            watermark.style.left = left;
+            watermark.style.top = top;
+            watermark.dataset.rotation = String(rotation);
+            watermark.dataset.scale = String(scale);
+            applyWatermarkTransform(watermark);
+            
+            UI.canvasContainer.appendChild(watermark);
+            watermarks.push(watermark);
+            makeDraggable(watermark);
+            selectWatermark(watermark);
+        }
+        
+        function removeWatermark() {
+            if (watermarks.length > 0) {
+                const wm = watermarks.pop();
+                if (wm === activeWatermark) activeWatermark = null;
+                wm.remove();
+                if (watermarks.length > 0) {
+                    selectWatermark(watermarks[watermarks.length - 1]);
+                } else {
+                    resetTransformControls();
+                }
+            }
+        }
+
+        function deleteSelectedObject() {
+            if (activeWatermark) {
+                const target = activeWatermark;
+                watermarks = watermarks.filter((item) => item !== target);
+                activeWatermark = null;
+                target.remove();
+                if (watermarks.length > 0) {
+                    selectWatermark(watermarks[watermarks.length - 1]);
+                } else {
+                    selectWatermark(null);
+                }
+                return;
+            }
+            showToast(t('toastNoSelection'), 'error');
+        }
+        
+        function updateFontSize(size) {
+            UI.sizeValue.textContent = size + 'px';
+            if (activeWatermark) {
+                normalizeWatermarkScale(activeWatermark);
+                activeWatermark.style.fontSize = size + 'px';
+                return;
+            }
+            watermarks.forEach(wm => wm.style.fontSize = size + 'px');
+        }
+        
+        function makeDraggable(element) {
+            let isDragging = false;
+            let isResizing = false;
+            let isRotating = false;
+            let startX, startY, startLeft, startTop;
+            let startDistance = 0;
+            let startFontSize = 0;
+            let startAngle = 0;
+            let startRotation = 0;
+            const rotateHandle = element.querySelector('.wm-handle-rotate');
+            const resizeHandle = element.querySelector('.wm-handle-resize');
+
+            function getCenter() {
+                const rect = UI.canvasContainer.getBoundingClientRect();
+                return {
+                    x: rect.left + (parseFloat(element.style.left) / 100 * rect.width),
+                    y: rect.top + (parseFloat(element.style.top) / 100 * rect.height)
+                };
+            }
+            
+            element.addEventListener('mousedown', (e) => {
+                if (e.target.closest('.wm-handle')) return;
+                selectWatermark(element);
+                isDragging = true;
+                element.classList.add('dragging');
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = parseFloat(element.style.left) || 50;
+                startTop = parseFloat(element.style.top) || 50;
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const rect = UI.canvasContainer.getBoundingClientRect();
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                
+                const newLeft = ((startLeft / 100 * rect.width + deltaX) / rect.width * 100);
+                const newTop = ((startTop / 100 * rect.height + deltaY) / rect.height * 100);
+                
+                element.style.left = Math.max(0, Math.min(100, newLeft)) + '%';
+                element.style.top = Math.max(0, Math.min(100, newTop)) + '%';
+                
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = parseFloat(element.style.left);
+                startTop = parseFloat(element.style.top);
+            });
+            
+            document.addEventListener('mouseup', () => {
+                isDragging = false;
+                element.classList.remove('dragging');
+            });
+
+            resizeHandle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                selectWatermark(element);
+                normalizeWatermarkScale(element);
+                const center = getCenter();
+                isResizing = true;
+                startDistance = Math.hypot(e.clientX - center.x, e.clientY - center.y) || 1;
+                startFontSize = parseInt(element.style.fontSize, 10) || DEFAULT_FONT_SIZE;
+            });
+
+            rotateHandle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                selectWatermark(element);
+                const center = getCenter();
+                isRotating = true;
+                startAngle = Math.atan2(e.clientY - center.y, e.clientX - center.x);
+                startRotation = parseFloat(element.dataset.rotation || '0');
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isResizing) {
+                    const center = getCenter();
+                    const nextDistance = Math.hypot(e.clientX - center.x, e.clientY - center.y) || 1;
+                    const nextFontSize = Math.max(12, Math.round(startFontSize * (nextDistance / startDistance)));
+                    element.style.fontSize = `${nextFontSize}px`;
+                    UI.fontSizeInput.value = nextFontSize;
+                    UI.sizeValue.textContent = `${nextFontSize}px`;
+                }
+
+                if (isRotating) {
+                    const center = getCenter();
+                    const nextAngle = Math.atan2(e.clientY - center.y, e.clientX - center.x);
+                    const deltaDegrees = (nextAngle - startAngle) * 180 / Math.PI;
+                    setWatermarkRotation(element, startRotation + deltaDegrees);
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                isResizing = false;
+                isRotating = false;
+            });
+        }
+
+        function updateMosaicBrushSizeValue() {
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            UI.mosaicBrushSizeValue.textContent = `${UI.mosaicBrushSizeInput.value}px`;
+        }
+
+        function resizeMosaicPreviewCanvas() {
+            const width = UI.mainImage.clientWidth || 0;
+            const height = UI.mainImage.clientHeight || 0;
+            UI.mosaicPreview.width = width;
+            UI.mosaicPreview.height = height;
+            UI.mosaicPreview.style.width = `${width}px`;
+            UI.mosaicPreview.style.height = `${height}px`;
+        }
+
+        function setMosaicBrushMode(enabled) {
+            isMosaicBrushMode = ENABLE_MOSAIC_FEATURE && enabled;
+            UI.mosaicPreview.classList.toggle('brush-mode', isMosaicBrushMode);
+            document.getElementById('btn-mosaic-brush').classList.toggle('btn-primary', isMosaicBrushMode);
+            document.getElementById('btn-mosaic-brush').classList.toggle('btn-secondary', !isMosaicBrushMode);
+        }
+
+        function toggleMosaicBrushMode() {
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            if (!currentImage) return showToast(t('toastOpenFilesFirst'), 'error');
+            setMosaicBrushMode(!isMosaicBrushMode);
+            showToast(t(isMosaicBrushMode ? 'toastMosaicBrushEnabled' : 'toastMosaicBrushDisabled'), 'success');
+        }
+
+        function clearMosaicBrushes() {
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            if (mosaicBrushStrokes.length === 0) return showToast(t('toastNoSelection'), 'error');
+            mosaicBrushStrokes = [];
+            renderMosaicPreview();
+            saveCurrentSettings();
+            showToast(t('toastClearedMosaic'), 'success');
+        }
+
+        function rebuildMosaicPixelPreview() {
+            if (!ENABLE_MOSAIC_FEATURE) {
+                mosaicPixelPreviewCanvas = null;
+                return;
+            }
+            const width = UI.mosaicPreview.width;
+            const height = UI.mosaicPreview.height;
+            if (!width || !height || !currentImage) {
+                mosaicPixelPreviewCanvas = null;
+                return;
+            }
+
+            const sampleWidth = Math.max(1, Math.round(width / PREVIEW_MOSAIC_BLOCK_SIZE));
+            const sampleHeight = Math.max(1, Math.round(height / PREVIEW_MOSAIC_BLOCK_SIZE));
+            const smallCanvas = document.createElement('canvas');
+            smallCanvas.width = sampleWidth;
+            smallCanvas.height = sampleHeight;
+            const smallCtx = smallCanvas.getContext('2d');
+            smallCtx.imageSmoothingEnabled = true;
+            smallCtx.drawImage(currentImage, 0, 0, sampleWidth, sampleHeight);
+
+            const previewCanvas = document.createElement('canvas');
+            previewCanvas.width = width;
+            previewCanvas.height = height;
+            const previewCtx = previewCanvas.getContext('2d');
+            previewCtx.imageSmoothingEnabled = false;
+            previewCtx.drawImage(smallCanvas, 0, 0, sampleWidth, sampleHeight, 0, 0, width, height);
+            mosaicPixelPreviewCanvas = previewCanvas;
+        }
+
+        function drawStrokePath(ctx, stroke, width, height) {
+            const points = stroke.points || [];
+            if (points.length === 0) return;
+            const brushSizePx = (stroke.brushSizePercent / 100) * width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#fff';
+            ctx.fillStyle = '#fff';
+            ctx.lineWidth = Math.max(8, brushSizePx);
+
+            if (points.length === 1) {
+                const point = points[0];
+                ctx.beginPath();
+                ctx.arc(point.x * width, point.y * height, ctx.lineWidth / 2, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(points[0].x * width, points[0].y * height);
+            points.slice(1).forEach((point) => {
+                ctx.lineTo(point.x * width, point.y * height);
+            });
+            ctx.stroke();
+        }
+
+        function renderMosaicPreview() {
+            const ctx = UI.mosaicPreview.getContext('2d');
+            ctx.clearRect(0, 0, UI.mosaicPreview.width, UI.mosaicPreview.height);
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            if (!mosaicPixelPreviewCanvas || mosaicBrushStrokes.length === 0) return;
+
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = UI.mosaicPreview.width;
+            maskCanvas.height = UI.mosaicPreview.height;
+            const maskCtx = maskCanvas.getContext('2d');
+            mosaicBrushStrokes.forEach((stroke) => {
+                drawStrokePath(maskCtx, stroke, maskCanvas.width, maskCanvas.height);
+            });
+
+            ctx.drawImage(mosaicPixelPreviewCanvas, 0, 0);
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.drawImage(maskCanvas, 0, 0);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        function createMosaicStrokeAtEvent(event) {
+            if (!ENABLE_MOSAIC_FEATURE) return null;
+            const rect = UI.mosaicPreview.getBoundingClientRect();
+            const brushSizePercent = (parseFloat(UI.mosaicBrushSizeInput.value || String(DEFAULT_MOSAIC_BRUSH_SIZE)) / rect.width) * 100;
+            return {
+                brushSizePercent,
+                points: [{
+                    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+                    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+                }]
+            };
+        }
+
+        function appendPointToCurrentMosaicStroke(event) {
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            const activeStroke = mosaicBrushStrokes[mosaicBrushStrokes.length - 1];
+            if (!activeStroke) return;
+            const rect = UI.mosaicPreview.getBoundingClientRect();
+            const nextPoint = {
+                x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+                y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+            };
+            const lastPoint = activeStroke.points[activeStroke.points.length - 1];
+            if (!lastPoint || Math.hypot(nextPoint.x - lastPoint.x, nextPoint.y - lastPoint.y) > 0.003) {
+                activeStroke.points.push(nextPoint);
+            }
+        }
+
+        // ==========================================
+        // STATE MANAGEMENT
+        // ==========================================
+        function saveCurrentSettings() {
+            if (currentFiles.length === 0) return;
+            
+            const fileName = currentFiles[currentFileIndex].name;
+            const previewImageWidth = UI.mainImage.clientWidth || UI.mainImage.naturalWidth || 800;
+            const savedWatermarks = watermarks.map(wm => ({
+                text: getWatermarkText(wm),
+                left: wm.style.left,
+                top: wm.style.top,
+                fontSize: parseInt(wm.style.fontSize, 10),
+                rotation: parseFloat(wm.dataset.rotation || '0'),
+                scale: parseFloat(wm.dataset.scale || '1'),
+                previewImageWidth
+            }));
+            const savedMosaics = ENABLE_MOSAIC_FEATURE ? JSON.parse(JSON.stringify(mosaicBrushStrokes)) : [];
+            
+            imageSettings[fileName] = {
+                watermarks: savedWatermarks,
+                mosaics: savedMosaics,
+                isProcessed: savedWatermarks.length > 0 || savedMosaics.length > 0
+            };
+            
+            const wrapper = document.querySelector(`.thumb-wrapper[data-filename="${fileName}"]`);
+            if (wrapper) {
+                if(savedWatermarks.length > 0 || savedMosaics.length > 0) wrapper.classList.add('processed');
+                else wrapper.classList.remove('processed');
+            }
+        }
+        
+        function saveCurrent() {
+            if (currentFiles.length === 0) return showToast(t('toastNoCurrentImage'), 'error');
+            saveCurrentSettings();
+            updateStatus();
+            showToast(t('toastCompletedCurrent'), 'success');
+        }
+
+        function applyToAll() {
+            if (currentFiles.length === 0) return showToast(t('toastOpenFilesFirst'), 'error');
+            if (watermarks.length === 0) return showToast(t('toastNoLayers'), 'error');
+
+            const previewImageWidth = UI.mainImage.clientWidth || UI.mainImage.naturalWidth || 800;
+            const currentLayout = watermarks.map(wm => ({
+                text: getWatermarkText(wm),
+                left: wm.style.left,
+                top: wm.style.top,
+                fontSize: parseInt(wm.style.fontSize, 10),
+                rotation: parseFloat(wm.dataset.rotation || '0'),
+                scale: parseFloat(wm.dataset.scale || '1'),
+                previewImageWidth
+            }));
+            const currentMosaics = ENABLE_MOSAIC_FEATURE ? JSON.parse(JSON.stringify(mosaicBrushStrokes)) : [];
+
+            let appliedCount = 0;
+            currentFiles.forEach(file => {
+                // Apply layout deep copy to ALL
+                imageSettings[file.name] = {
+                    watermarks: JSON.parse(JSON.stringify(currentLayout)),
+                    mosaics: JSON.parse(JSON.stringify(currentMosaics)),
+                    isProcessed: true
+                };
+                
+                // Set UI immediately
+                const wrapper = document.querySelector(`.thumb-wrapper[data-filename="${file.name}"]`);
+                if(wrapper) wrapper.classList.add('processed');
+                appliedCount++;
+            });
+
+            updateStatus();
+            showToast(t('toastAppliedToAll', { count: appliedCount }), 'success');
+        }
+
+        // ==========================================
+        // EXPORT & IO
+        // ==========================================
+        async function selectFolder() {
+            try {
+                const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                window.exportDirectoryHandle = dirHandle;
+                UI.exportPath.value = dirHandle.name;
+                await saveExportDirectoryHandle(dirHandle);
+            } catch (err) {
+                if (err.name !== 'AbortError') showToast(t('toastSelectFolderFailed'), 'error');
+            }
+        }
+        
+        async function batchExport() {
+            saveCurrentSettings();
+            const processedFiles = Object.entries(imageSettings).filter(([_, settings]) => settings.isProcessed);
+            
+            if (processedFiles.length === 0) return showToast(t('toastNoCompletedExport'), 'error');
+            if (!window.exportDirectoryHandle) {
+                await restoreExportDirectoryHandle();
+            }
+            if (!window.exportDirectoryHandle) {
+                showToast(t('toastNeedExportFolder'), 'error');
+                return selectFolder();
+            }
+            
+            showToast(t('toastStartExport', { count: processedFiles.length }), 'success');
+            let exported = 0;
+            
+            try {
+                for (const [fileName, settings] of processedFiles) {
+                    const file = currentFiles.find(f => f.name === fileName);
+                    if (!file) continue;
+                    
+                    const img = new Image();
+                    const imageUrl = URL.createObjectURL(file);
+                    const exportFormat = getExportFormatConfig(file);
+                    let exportFileName = buildExportFileName(fileName, exportFormat.extension);
+                    try {
+                        exportFileName = await resolveExportFileName(exportFileName);
+                        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = imageUrl; });
+
+                        const canvas = document.getElementById('export-canvas');
+                        const ctx = canvas.getContext('2d');
+                        canvas.width = img.naturalWidth;
+                        canvas.height = img.naturalHeight;
+                        ctx.drawImage(img, 0, 0);
+
+                        const previewWatermark = watermarks[0];
+                        const previewStyle = previewWatermark ? window.getComputedStyle(previewWatermark) : null;
+                        const fontFamily = previewStyle?.fontFamily || DEFAULT_EXPORT_FONT_FAMILY;
+                        const fontWeight = previewStyle?.fontWeight || DEFAULT_WATERMARK_FONT_WEIGHT;
+                        const mosaicSourceCanvas = document.createElement('canvas');
+                        mosaicSourceCanvas.width = canvas.width;
+                        mosaicSourceCanvas.height = canvas.height;
+                        const mosaicSourceCtx = mosaicSourceCanvas.getContext('2d');
+                        mosaicSourceCtx.drawImage(canvas, 0, 0);
+
+                        if (ENABLE_MOSAIC_FEATURE && (settings.mosaics || []).length > 0) {
+                            applyBrushMosaicToCanvas(ctx, mosaicSourceCanvas, settings.mosaics);
+                        }
+
+                        settings.watermarks.forEach(wm => {
+                            const x = parseFloat(wm.left) / 100 * img.naturalWidth;
+                            const y = parseFloat(wm.top) / 100 * img.naturalHeight;
+                            const previewWidth = wm.previewImageWidth || UI.mainImage.clientWidth || 800;
+                            const exportScaleFactor = img.naturalWidth / previewWidth;
+                            const fontSize = Math.round(wm.fontSize * exportScaleFactor);
+                            const scale = typeof wm.scale === 'number' ? wm.scale : 1;
+                            const rotation = typeof wm.rotation === 'number' ? wm.rotation : 0;
+                            const renderedSize = Math.max(1, Math.round(fontSize * scale));
+
+                            // Canvas 2D does not resolve CSS var(...) in ctx.font, use computed family directly.
+                            ctx.font = `${fontWeight} ${renderedSize}px ${fontFamily}`;
+                            ctx.fillStyle = 'white';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.save();
+                            ctx.translate(x, y);
+                            ctx.rotate((rotation * Math.PI) / 180);
+                            ctx.fillText(wm.text, 0, 0);
+                            ctx.restore();
+                        });
+
+                        const fileHandle = await window.exportDirectoryHandle.getFileHandle(exportFileName, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        const blob = await new Promise(res => canvas.toBlob(res, exportFormat.mimeType, exportFormat.quality));
+                        await writable.write(blob);
+                        await writable.close();
+                        exported++;
+                    } catch (saveErr) {
+                        console.error('Save error:', saveErr);
+                        showToast(t('toastSaveFailed', { fileName: exportFileName }), 'error');
+                    } finally {
+                        URL.revokeObjectURL(imageUrl);
+                    }
+                    
+                    // Throttle sequentially to prevent crashing
+                    await new Promise(r => setTimeout(r, 20)); 
+                }
+                showToast(t('toastExportComplete', { count: exported }), 'success');
+                
+            } catch (err) {
+                showToast(t('toastExportFailed', { message: err.message }), 'error');
+            }
+        }
+        
+        function clearAll() {
+            if(!confirm(t('confirmClearWorkspace'))) return;
+            
+            UI.mainImage.src = '';
+            UI.mainImage.style.display = 'none';
+            UI.emptyState.style.display = 'block';
+            UI.statusOverlay.style.display = 'none';
+            UI.exportPath.value = window.exportDirectoryHandle ? UI.exportPath.value : DEFAULT_EXPORT_PATH;
+            resetTransformControls();
+            
+            document.querySelectorAll('.watermark').forEach(w => w.remove());
+            watermarks = [];
+            activeWatermark = null;
+            mosaicBrushStrokes = [];
+            setMosaicBrushMode(false);
+            renderMosaicPreview();
+            currentImage = null;
+            currentFiles = [];
+            imageSettings = {};
+            UI.filmstrip.innerHTML = '';
+            
+            document.getElementById('file-input').value = '';
+            document.getElementById('folder-input').value = '';
+            updateStatus();
+        }
+
+        function getOriginalExportFormat(file) {
+            const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+            if (['jpg', 'jpeg'].includes(extension)) {
+                return { extension: 'jpg', mimeType: 'image/jpeg', quality: 0.95 };
+            }
+            if (extension === 'png') {
+                return { extension: 'png', mimeType: 'image/png' };
+            }
+            if (extension === 'webp') {
+                return { extension: 'webp', mimeType: 'image/webp', quality: 0.95 };
+            }
+            return { extension: 'jpg', mimeType: 'image/jpeg', quality: 0.95 };
+        }
+
+        function getExportFormatConfig(file) {
+            const selectedFormat = UI.exportFormat.value;
+            if (selectedFormat === 'jpg') {
+                return { extension: 'jpg', mimeType: 'image/jpeg', quality: 0.95 };
+            }
+            if (selectedFormat === 'png') {
+                return { extension: 'png', mimeType: 'image/png' };
+            }
+            return getOriginalExportFormat(file);
+        }
+
+        function buildExportFileName(fileName, extension) {
+            const dotIndex = fileName.lastIndexOf('.');
+            if (dotIndex <= 0) return `${fileName}_aicwm.${extension}`;
+
+            const baseName = fileName.slice(0, dotIndex);
+            return `${baseName}_aicwm.${extension}`;
+        }
+
+        async function resolveExportFileName(preferredName) {
+            const dotIndex = preferredName.lastIndexOf('.');
+            const hasExtension = dotIndex > 0;
+            const baseName = hasExtension ? preferredName.slice(0, dotIndex) : preferredName;
+            const extension = hasExtension ? preferredName.slice(dotIndex) : '';
+
+            let candidateName = preferredName;
+            let suffix = 2;
+
+            while (true) {
+                try {
+                    await window.exportDirectoryHandle.getFileHandle(candidateName, { create: false });
+                    candidateName = `${baseName}_${suffix}${extension}`;
+                    suffix++;
+                } catch (err) {
+                    if (err.name === 'NotFoundError') return candidateName;
+                    throw err;
+                }
+            }
+        }
+
+        function buildPixelatedCanvas(sourceCanvas, blockSize) {
+            const smallCanvas = document.createElement('canvas');
+            smallCanvas.width = Math.max(1, Math.round(sourceCanvas.width / blockSize));
+            smallCanvas.height = Math.max(1, Math.round(sourceCanvas.height / blockSize));
+            const smallCtx = smallCanvas.getContext('2d');
+            smallCtx.imageSmoothingEnabled = true;
+            smallCtx.drawImage(sourceCanvas, 0, 0, smallCanvas.width, smallCanvas.height);
+
+            const outputCanvas = document.createElement('canvas');
+            outputCanvas.width = sourceCanvas.width;
+            outputCanvas.height = sourceCanvas.height;
+            const outputCtx = outputCanvas.getContext('2d');
+            outputCtx.imageSmoothingEnabled = false;
+            outputCtx.drawImage(smallCanvas, 0, 0, smallCanvas.width, smallCanvas.height, 0, 0, outputCanvas.width, outputCanvas.height);
+            return outputCanvas;
+        }
+
+        function applyBrushMosaicToCanvas(ctx, sourceCanvas, strokes) {
+            if (!ENABLE_MOSAIC_FEATURE || strokes.length === 0) return;
+            const pixelatedCanvas = buildPixelatedCanvas(sourceCanvas, EXPORT_MOSAIC_BLOCK_SIZE);
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = sourceCanvas.width;
+            maskCanvas.height = sourceCanvas.height;
+            const maskCtx = maskCanvas.getContext('2d');
+            strokes.forEach((stroke) => {
+                drawStrokePath(maskCtx, stroke, sourceCanvas.width, sourceCanvas.height);
+            });
+
+            const effectCanvas = document.createElement('canvas');
+            effectCanvas.width = sourceCanvas.width;
+            effectCanvas.height = sourceCanvas.height;
+            const effectCtx = effectCanvas.getContext('2d');
+            effectCtx.drawImage(pixelatedCanvas, 0, 0);
+            effectCtx.globalCompositeOperation = 'destination-in';
+            effectCtx.drawImage(maskCanvas, 0, 0);
+            effectCtx.globalCompositeOperation = 'source-over';
+            ctx.drawImage(effectCanvas, 0, 0);
+        }
+
+        document.addEventListener('keydown', (event) => {
+            const target = event.target;
+            const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+            const isCopyPasteShortcut = (event.ctrlKey || event.metaKey) && ['c', 'v'].includes(event.key.toLowerCase());
+            if (isTyping) return;
+
+            if (isCopyPasteShortcut) {
+                event.preventDefault();
+                if (event.key.toLowerCase() === 'c') {
+                    copyActiveWatermark();
+                } else {
+                    pasteCopiedWatermark();
+                }
+                return;
+            }
+
+            if (event.key === 'Delete' || event.key === 'Backspace') {
+                event.preventDefault();
+                deleteSelectedObject();
+            }
+        });
+
+        UI.textInput.addEventListener('input', () => {
+            if (!activeWatermark) return;
+            setWatermarkText(activeWatermark, UI.textInput.value);
+        });
+
+        UI.rotationInput.addEventListener('input', () => {
+            if (!activeWatermark) return;
+            setWatermarkRotation(activeWatermark, parseFloat(UI.rotationInput.value || '0'));
+        });
+
+        UI.mosaicBrushSizeInput.addEventListener('input', () => {
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            updateMosaicBrushSizeValue();
+        });
+
+        UI.canvasContainer.addEventListener('mousedown', (event) => {
+            if (event.target === UI.canvasContainer || event.target === UI.mainImage) {
+                selectWatermark(null);
+            }
+        });
+
+        UI.mosaicPreview.addEventListener('mousedown', (event) => {
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            if (!isMosaicBrushMode) return;
+            event.preventDefault();
+            selectWatermark(null);
+            isPaintingMosaic = true;
+            mosaicBrushStrokes.push(createMosaicStrokeAtEvent(event));
+            renderMosaicPreview();
+        });
+
+        UI.mosaicPreview.addEventListener('mousemove', (event) => {
+            if (!ENABLE_MOSAIC_FEATURE) return;
+            if (!isMosaicBrushMode || !isPaintingMosaic) return;
+            appendPointToCurrentMosaicStroke(event);
+            renderMosaicPreview();
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!isPaintingMosaic) return;
+            isPaintingMosaic = false;
+            saveCurrentSettings();
+        });
+
+        window.addEventListener('resize', () => {
+            resizeMosaicPreviewCanvas();
+            rebuildMosaicPixelPreview();
+            renderMosaicPreview();
+        });
+
+        updateMosaicBrushSizeValue();
+
+        // ==========================================
+        // UTILS
+        // ==========================================
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            // Inject icon
+            const icon = type === 'success' ? 
+                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>' : 
+                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12" y2="16"></line></svg>';
+            
+            toast.innerHTML = `${icon}<span>${message}</span>`;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.add('fade-out');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        async function dataUrlToFile(dataUrl, fileName) {
+            const response = await fetch(dataUrl);
+            const blob = await response.blob();
+            const mimeType = blob.type || 'image/jpeg';
+            return new File([blob], fileName, { type: mimeType });
+        }
+
+        async function importDataUrlFromHost(dataUrl, fileName = `pipeline_${Date.now()}.jpg`) {
+            const file = await dataUrlToFile(dataUrl, fileName);
+            initializeLoadedFiles([file]);
+            showToast('Pipeline image imported to Batch Watermark', 'success');
+        }
+
+        window.__StoryboardImageEditorBridge = {
+            importDataUrl: importDataUrlFromHost
+        };
+
+        window.addEventListener('message', async (event) => {
+            const data = event.data;
+            if (!data || typeof data !== 'object') {
+                return;
+            }
+
+            if (data.type === 'sbe-set-language') {
+                const nextLanguage = data.payload && data.payload.language;
+                if (nextLanguage === 'zh' || nextLanguage === 'en') {
+                    setLanguage(nextLanguage);
+                }
+                return;
+            }
+
+            if (data.type !== 'sbe-import-request' || !data.requestId) {
+                return;
+            }
+
+            const payload = data.payload || {};
+            try {
+                await importDataUrlFromHost(payload.dataUrl, payload.fileName);
+                event.source.postMessage({
+                    type: 'sbe-import-response',
+                    requestId: data.requestId,
+                    success: true
+                }, '*');
+            } catch (error) {
+                event.source.postMessage({
+                    type: 'sbe-import-response',
+                    requestId: data.requestId,
+                    success: false,
+                    error: error && error.message ? error.message : 'Unknown watermark import error'
+                }, '*');
+            }
+        });
+
+        applyTranslations();
+
+        // Try restore previously authorized export directory on startup.
+        restoreExportDirectoryHandle();
+    </script>
+</body>
+</html>

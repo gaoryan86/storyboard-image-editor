@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storyboard Image Editor</title>
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #171b22;
+            --panel-soft: #1f2530;
+            --border: #2c3340;
+            --text: #eef2f7;
+            --text-muted: #9aa6ba;
+            --accent: #3e7bff;
+            --accent-hover: #2f68e1;
+            --ok: #20b26d;
+            --warn: #f59e0b;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "SF Pro Display", "PingFang SC", "Helvetica Neue", "Segoe UI", sans-serif;
+            color: var(--text);
+            background: radial-gradient(circle at 0% 0%, #1a2233, var(--bg) 42%);
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            height: 60px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(23, 27, 34, 0.94);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 18px;
+            backdrop-filter: blur(8px);
+        }
+        .title {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .title h1 {
+            margin: 0;
+            font-size: 15px;
+            letter-spacing: 0.03em;
+        }
+        .title p {
+            margin: 0;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .mode-buttons {
+            display: inline-flex;
+            gap: 8px;
+        }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .lang-switch {
+            display: inline-flex;
+            gap: 4px;
+            padding: 3px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--panel);
+        }
+        .lang-btn {
+            border: 0;
+            border-radius: 999px;
+            min-width: 44px;
+            height: 30px;
+            padding: 0 10px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .lang-btn.active {
+            background: var(--accent);
+            color: #fff;
+        }
+        .mode-btn,
+        .action-btn {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--panel-soft);
+            color: var(--text);
+            height: 36px;
+            padding: 0 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .mode-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .mode-btn:hover,
+        .action-btn:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+        .toolbar {
+            height: 54px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(18, 22, 29, 0.92);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 18px;
+        }
+        .hint {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+        .action-btn {
+            background: var(--panel);
+        }
+        .action-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .workspace {
+            flex: 1;
+            min-height: 0;
+            display: grid;
+            gap: 10px;
+            padding: 10px;
+        }
+        .workspace.single {
+            grid-template-columns: 1fr;
+        }
+        .workspace.pipeline {
+            grid-template-columns: 1fr 1fr;
+        }
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .panel.hidden {
+            display: none;
+        }
+        .panel-head {
+            height: 40px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        iframe {
+            border: 0;
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            flex: 1;
+            background: #0f1012;
+        }
+        .status-pill {
+            font-size: 11px;
+            line-height: 1;
+            border-radius: 999px;
+            padding: 6px 8px;
+            color: #fff;
+            background: #465166;
+        }
+        .status-pill.ok {
+            background: var(--ok);
+        }
+        .status-pill.warn {
+            background: var(--warn);
+        }
+        @media (max-width: 1080px) {
+            header {
+                height: auto;
+                padding: 12px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            .toolbar {
+                height: auto;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+                padding: 10px 12px;
+            }
+            .workspace.pipeline {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="title">
+            <h1>Storyboard Image Editor</h1>
+            <p id="app-subtitle">Unified Stitch + Watermark Workflow</p>
+        </div>
+        <div class="header-actions">
+            <div class="mode-buttons">
+                <button id="mode-pipeline" class="mode-btn active" data-mode="pipeline">Pipeline</button>
+                <button id="mode-stitch-only" class="mode-btn" data-mode="stitch-only">Stitch Only</button>
+                <button id="mode-watermark-only" class="mode-btn" data-mode="watermark-only">Watermark Only</button>
+            </div>
+            <div class="lang-switch">
+                <button id="lang-zh" class="lang-btn">中文</button>
+                <button id="lang-en" class="lang-btn">EN</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="toolbar">
+        <div id="workflow-hint" class="hint">Pipeline mode: stitch first, then send result to watermark.</div>
+        <div class="actions">
+            <button id="send-to-watermark-btn" class="action-btn primary">Send Stitch Result To Watermark</button>
+            <button id="focus-watermark-btn" class="action-btn">Go To Watermark</button>
+        </div>
+    </div>
+
+    <main id="workspace" class="workspace pipeline">
+        <section id="stitch-panel" class="panel">
+            <div class="panel-head">
+                <span id="stitch-title">Storyboard Stitcher (includes Replace Cells)</span>
+                <span id="stitch-status" class="status-pill">Waiting</span>
+            </div>
+            <iframe id="stitch-frame" src="./apps/stitcher/index.html" title="Storyboard Stitcher"></iframe>
+        </section>
+
+        <section id="watermark-panel" class="panel">
+            <div class="panel-head">
+                <span id="watermark-title">Batch Watermark (text only)</span>
+                <span id="watermark-status" class="status-pill warn">No Pipeline Input</span>
+            </div>
+            <iframe id="watermark-frame" src="./apps/watermark/index.html" title="Batch Watermark"></iframe>
+        </section>
+    </main>
+
+    <script src="./app.js"></script>
+</body>
+</html>
